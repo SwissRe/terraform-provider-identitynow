@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.22.2
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-testing v1.6.0
-	github.com/sailpoint-oss/golang-sdk/v2 v2.0.5
+	github.com/sailpoint-oss/golang-sdk/v2 v2.1.18
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/oauth2 v0.19.0
 )
@@ -98,6 +98,7 @@ require (
 	google.golang.org/grpc v1.63.2 // indirect
 	google.golang.org/protobuf v1.34.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/validator.v2 v2.0.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
