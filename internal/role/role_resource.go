@@ -724,8 +724,8 @@ func (r *roleResource) mapToAccessRequestConfig(config *sailpoint_v3.Requestabil
 	commentsRequired := config.CommentsRequired.Get()
 	denialCommentsRequired := config.DenialCommentsRequired.Get()
 
-	if (commentsRequired == nil || *commentsRequired == false) &&
-		(denialCommentsRequired == nil || *denialCommentsRequired == false) &&
+	if (commentsRequired == nil || !*commentsRequired) &&
+		(denialCommentsRequired == nil || !*denialCommentsRequired) &&
 		len(config.ApprovalSchemes) == 0 {
 		return &requestConfig{
 			CommentsRequired:       types.BoolPointerValue(nil), // Ensure empty object instead of null
