@@ -701,49 +701,73 @@ func (r *roleResource) mapToTerraformModel(model *roleModel, role *sailpoint_v3.
 		}
 		model.Segments = types.SetValueMust(types.StringType, segments)
 	} else {
-		model.Segments = types.SetNull(types.StringType)
+		if role.Segments == nil {
+			model.Segments = types.SetNull(types.StringType)
+		} else {
+			segments := make([]attr.Value, len(role.Segments))
+			model.Segments = types.SetValueMust(types.StringType, segments)
+		}
 	}
 }
 
 func (r *roleResource) mapToAccessRequestConfig(config *sailpoint_v3.RequestabilityForRole) *requestConfig {
-	if config == nil ||
-		(config.CommentsRequired.Get() == nil && config.DenialCommentsRequired.Get() == nil && len(config.ApprovalSchemes) == 0) ||
-		(*config.CommentsRequired.Get() == false && *config.DenialCommentsRequired.Get() == false && len(config.ApprovalSchemes) == 0) {
-		return nil
-	}
-
-	var schemas []approvalSchemas = nil
-	if len(config.ApprovalSchemes) > 0 {
-		schemas = make([]approvalSchemas, len(config.ApprovalSchemes))
-		for i, appSchema := range config.ApprovalSchemes {
-			schemas[i] = approvalSchemas{
-				ApproverType: types.StringPointerValue(appSchema.ApproverType),
-				ApproverId:   types.StringPointerValue(appSchema.ApproverId.Get()),
-			}
+	// Ensure config is never nil
+	if config == nil {
+		return &requestConfig{
+			CommentsRequired:       types.BoolPointerValue(nil), // Allow Terraform to treat it as unknown
+			DenialCommentsRequired: types.BoolPointerValue(nil),
+			ApprovalSchemas:        []approvalSchemas{}, // Always return an empty slice, not nil
 		}
 	}
+
+	// Avoid nil pointer dereference when checking booleans
+	commentsRequired := config.CommentsRequired.Get()
+	denialCommentsRequired := config.DenialCommentsRequired.Get()
+
+	if (commentsRequired == nil || !*commentsRequired) &&
+		(denialCommentsRequired == nil || !*denialCommentsRequired) &&
+		len(config.ApprovalSchemes) == 0 {
+		return &requestConfig{
+			CommentsRequired:       types.BoolPointerValue(nil), // Ensure empty object instead of null
+			DenialCommentsRequired: types.BoolPointerValue(nil),
+			ApprovalSchemas:        []approvalSchemas{}, // Return empty slice instead of nil
+		}
+	}
+
+	// Ensure ApprovalSchemas is always a valid slice
+	schemas := make([]approvalSchemas, len(config.ApprovalSchemes))
+	for i, appSchema := range config.ApprovalSchemes {
+		schemas[i] = approvalSchemas{
+			ApproverType: types.StringPointerValue(appSchema.ApproverType),
+			ApproverId:   types.StringPointerValue(appSchema.ApproverId.Get()),
+		}
+	}
+
 	return &requestConfig{
-		CommentsRequired:       types.BoolPointerValue(config.CommentsRequired.Get()),
-		DenialCommentsRequired: types.BoolPointerValue(config.DenialCommentsRequired.Get()),
+		CommentsRequired:       types.BoolPointerValue(commentsRequired),
+		DenialCommentsRequired: types.BoolPointerValue(denialCommentsRequired),
 		ApprovalSchemas:        schemas,
 	}
 }
 
 func (r *roleResource) mapToRevocationRequestConfig(config *sailpoint_v3.RevocabilityForRole) *requestConfig {
-	if config == nil ||
-		(config.CommentsRequired.Get() == nil && config.DenialCommentsRequired.Get() == nil && len(config.ApprovalSchemes) == 0) {
-		return nil
-	}
-	var schemas []approvalSchemas = nil
-	if len(config.ApprovalSchemes) > 0 {
-		schemas = make([]approvalSchemas, len(config.ApprovalSchemes))
-		for i, appSchema := range config.ApprovalSchemes {
-			schemas[i] = approvalSchemas{
-				ApproverType: types.StringPointerValue(appSchema.ApproverType),
-				ApproverId:   types.StringPointerValue(appSchema.ApproverId.Get()),
-			}
+	if config == nil {
+		return &requestConfig{
+			CommentsRequired:       types.BoolValue(false),
+			DenialCommentsRequired: types.BoolValue(false),
+			ApprovalSchemas:        []approvalSchemas{}, // Empty slice, not nil
 		}
 	}
+
+	// Ensure approval schemas is always an empty slice if no data is present
+	schemas := make([]approvalSchemas, len(config.ApprovalSchemes))
+	for i, appSchema := range config.ApprovalSchemes {
+		schemas[i] = approvalSchemas{
+			ApproverType: types.StringPointerValue(appSchema.ApproverType),
+			ApproverId:   types.StringPointerValue(appSchema.ApproverId.Get()),
+		}
+	}
+
 	return &requestConfig{
 		CommentsRequired:       types.BoolPointerValue(config.CommentsRequired.Get()),
 		DenialCommentsRequired: types.BoolPointerValue(config.DenialCommentsRequired.Get()),
@@ -901,4 +925,34 @@ func (r *roleResource) generateJsonPatch(newModel *sailpoint_v3.Role, oldModel *
 func (r *roleResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	// Retrieve import ID and save to id attribute
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	// Check for errors from the passthrough function
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Fetch nested attributes from the state
+	var ownerId, ownerName, ownerType string
+
+	// Read the nested attributes safely
+	resp.State.GetAttribute(ctx, path.Root("owner").AtName("id"), &ownerId)
+
+	resp.State.GetAttribute(ctx, path.Root("owner").AtName("name"), &ownerName)
+
+	resp.State.GetAttribute(ctx, path.Root("owner").AtName("type"), &ownerType)
+
+	// Create a new ReferenceModel for the owner
+	updatedOwner := util.ReferenceModel{
+		Type: types.StringValue(ownerType),
+		Id:   types.StringValue(ownerId),
+		Name: types.StringValue(ownerName),
+	}
+
+	// Set the updated owner back into the state
+	err := resp.State.SetAttribute(ctx, path.Root("owner"), updatedOwner)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error setting updated owner",
+			fmt.Sprintf("Failed to set updated owner attribute: %s", err),
+		)
+	}
 }
